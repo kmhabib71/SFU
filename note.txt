@@ -1,0 +1,18 @@
+1. To download wrtc follow the steps:
+npm install -g node-pre-gyp
+npm cache clean --force
+npm install wrtc@latest
+
+
+2. Offer has dependency on LocalStream and Socket connection like this: localStream && socket.connected. That mean CreateOffer should only be called after creating LocalStream otherwise offer sdp will net get mediaData from mediaDevices.
+
+3. So ontrack is not firing in frontend because in backend sdp is recvonly which should sendonly or sndrcv, so need to renegotiation from backend to frontend because when need to change sdp its need to renegotiate. But now I see sdp is recvonly at backend but track is fired in the frontend.
+
+4. Same track is sent from backend multiple times that's why need to filterout same stream multiple times that generate video tag by using the code in client ontrack event: 
+
+const existingVideos = Array.from(
+      document.getElementById("remoteVideos").children
+    );
+    const trackAlreadyRendered = existingVideos.some(
+      (video) => video.srcObject === event.streams[0]
+    );
