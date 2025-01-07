@@ -276,37 +276,53 @@ function forwardTrackToOthers(sourceSocketId, track, stream, source) {
     " streamID for: ", sourceSocketId, " is: ", clients[sourceSocketId].localStreams
    
   );
-  console.log(
-    "stream object in forwardTrackToOthers for ",
-    { sourceSocketId }, "source: ", source,
-    {
-      id: stream.id,
-      tracks: stream.getTracks().map((track) => ({
-        id: track.id,
-        kind: track.kind,
-        // readyState: track.readyState,
-      })),
-    }
-  );
-  Object.keys(clients).forEach((socketId) => {
-    if (socketId !== sourceSocketId && clients[socketId].peerConnection) {
-      const receiverConnection = clients[socketId].peerConnection;
+  // console.log(
+  //   "stream object in forwardTrackToOthers for ",
+  //   { sourceSocketId }, "source: ", source,
+  //   {
+  //     id: stream.id,
+  //     tracks: stream.getTracks().map((track) => ({
+  //       id: track.id,
+  //       kind: track.kind,
+  //       // readyState: track.readyState,
+  //     })),
+  //   }
+  // );
+  Object.keys(clients).forEach((destinationSocketId) => {
+    if (destinationSocketId !== sourceSocketId && clients[destinationSocketId].peerConnection) {
+      const receiverConnection = clients[destinationSocketId].peerConnection;
 
       // Ensure forwardedTracks exists
-      if (!clients[socketId].forwardedTracks) {
-        clients[socketId].forwardedTracks = new Map();
+      if (!clients[destinationSocketId].forwardedTracks) {
+        clients[destinationSocketId].forwardedTracks = new Map();
       }
 
-      const forwardedTracks = clients[socketId].forwardedTracks;
-      const trackKey = `${track.id}-${stream.id}-${sourceSocketId}`;
+      const forwardedTracks = clients[destinationSocketId].forwardedTracks;
+      const trackKey = `${track.id}|${stream.id}|${sourceSocketId}|${destinationSocketId}`;
+
       // Check if the track has already been forwarded
       if (forwardedTracks.has(trackKey)) {
         console.warn(
-          `Track ${track.id} already forwarded to receiver ${socketId}. Skipping.`
+          `Track ${track.id} already forwarded to receiver ${destinationSocketId}. Skipping.`
         );
         return;
       }
-     
+      const existingForwardedTrack = Array.from(forwardedTracks.keys()).find((key) => {
+        const [trackId, streamId, sourceId, destId] = key.split("|");
+        return (
+          sourceId === sourceSocketId &&
+          destId === destinationSocketId &&
+          forwardedTracks.get(key).kind === track.kind // Ensure the kind matches
+        );
+      });
+      
+      if (existingForwardedTrack) {
+        console.log(`Track ${track.id} (Stream ID: ${stream.id}) already forwarded from ${sourceSocketId} to ${destinationSocketId}. Skipping.`);
+        return;
+      }
+      
+      // If not forwarded, add to forwardedTracks
+
    
       if (!hasValidVideoTrack) {
         console.warn(
@@ -316,7 +332,7 @@ function forwardTrackToOthers(sourceSocketId, track, stream, source) {
       }
       try {
         console.log(
-          `Forwarding track ${track.kind} (Stream ID: ${stream.id}) from ${sourceSocketId} to ${socketId}`
+          `Forwarding track ${track.kind} ${track.id} (Stream ID: ${stream.id}) from ${sourceSocketId} to ${destinationSocketId}`
         );
         if (!stream) {
           console.warn(`Stream is missing for track ${track.id}. Skipping.`);
@@ -338,15 +354,20 @@ function forwardTrackToOthers(sourceSocketId, track, stream, source) {
         // stream.getTracks().forEach((track) => {
         //   console.log(`Forwarding track: ${track.kind}, ID: ${track.id}`);
         receiverConnection.addTrack(track, stream);
-        // clients[socketId].streams.push(stream.id); // Add the latest stream ID
+        // clients[destinationSocketId].streams.push(stream.id); // Add the latest stream ID
         // });
 
         // Mark track as forwarded
-        forwardedTracks.set(trackKey, true)
-        // console.log(`Track ${track.id} added to receiver ${socketId}`);
+        forwardedTracks.set(trackKey, { kind: track.kind });
+
+        // console.log("forwardedTracksss: ", forwardedTracks);
+        // const matchingKey = Array.from(forwardedTracks.keys()).find((key) => {
+
+        
+        // console.log(`Track ${track.id} added to receiver ${destinationSocketId}`);
       } catch (error) {
         console.error(
-          `Error forwarding track ${track.id} (Stream ID: ${stream.id}) to ${socketId}:`,
+          `Error forwarding track ${track.id} (Stream ID: ${stream.id}) to ${destinationSocketId}:`,
           error
         );
       }
@@ -428,9 +449,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("renegotiation-answer", async (data) => {
-    console.log("renegotiation-answer socket id: ", socket.id);
+    // console.log("renegotiation-answer socket id: ", socket.id);
     console.log(
-      "clients (socketId and streamIds only):",
+      "renegotiation (socketId and streamIds only):",
       Object.entries(clients).map(([key, value]) => ({
         socketId: value.socket.id.slice(-4) ,
         streamIds: value.localStreams,
@@ -479,12 +500,12 @@ io.on("connection", (socket) => {
           }
         });
         client.peerConnection.close();
-        console.log(`PeerConnection closed for client: ${socket.id}`);
+        // console.log(`PeerConnection closed for client: ${socket.id}`);
       }
   
       // Remove the client from the clients object
       delete clients[socket.id];
-      console.log(`Client removed: ${socket.id}`);
+      // console.log(`Client removed: ${socket.id}`);
       console.log("............................................................");
       console.log("............................................................");
     } else {
