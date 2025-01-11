@@ -1,4 +1,3 @@
-//client.js
 const socket = io("http://localhost:3000");
 const localVideo = document.getElementById("localVideo");
 
@@ -7,8 +6,6 @@ let peerConnection;
 
 socket.on("connect", () => {
   console.log("Connected to Socket.IO server with ID:", socket.id);
-  document.title = socket.id.slice(-4);
-  cleanUpResources();
   loadLocalStream();
 });
 
@@ -35,43 +32,19 @@ async function createPeerConnection() {
     }
   };
 
-
+  // Listen for remote tracks
   peerConnection.ontrack = (event) => {
-    const stream = event.streams[0];
-    const streamId = stream.id;
-    const remoteVideoId = `video-${streamId}`;
+    console.log("Remote track received:", event.track);
+    console.log("Stream from remote track:", event.streams[0]);
 
-    console.log(
-      `Remote stream received: Stream ID=${streamId} track kind=${event.track.kind}`
-    );
-    // console.log("stream getTracks", stream);
-
-    // Validate the stream and its video tracks
-    if (
-      !stream ||
-      stream.getTracks().length === 0 ||
-      !stream.getVideoTracks().some((track) => track.enabled)
-    ) {
-      console.warn(`Stream ${streamId} has no valid video tracks. Skipping.`);
-      return;
-    }
-
-    let remoteVideo = document.getElementById(remoteVideoId);
-
-    // Prevent duplicate video elements
-    if (!remoteVideo) {
-      remoteVideo = document.createElement("video");
-      remoteVideo.id = remoteVideoId;
-      remoteVideo.srcObject = stream;
-      remoteVideo.autoplay = true;
-      remoteVideo.playsInline = true;
-      document.getElementById("remoteVideos").appendChild(remoteVideo);
-      // console.log(`Added video element for stream ID: ${streamId}`);
-    } else {
-      console.warn(`Video element already exists for Stream ID: ${streamId}`);
-    }
+    const remoteVideo = document.createElement("video");
+    remoteVideo.srcObject = event.streams[0];
+    remoteVideo.autoplay = true;
+    remoteVideo.playsInline = true;
+    document.getElementById("remoteVideos").appendChild(remoteVideo);
   };
 
+  // Monitor signaling state changes
   peerConnection.onsignalingstatechange = () => {
     console.log("Signaling state changed:", peerConnection.signalingState);
 
@@ -143,7 +116,7 @@ async function createOffer() {
   const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
 
-  // console.log("Offer created: ", offer.sdp);
+  console.log("Offer created: ", offer.sdp);
 
   socket.emit("offer", { offer });
 }
@@ -151,7 +124,7 @@ async function createOffer() {
 // Handle incoming answer
 socket.on("answer", async (data) => {
   console.log("Answer received from server:");
-  // console.log("Local SDP Offer:", peerConnection.localDescription.sdp);
+  console.log("Local SDP Offer:", peerConnection.localDescription.sdp);
 
   if (peerConnection.signalingState === "have-local-offer") {
     try {
@@ -188,90 +161,23 @@ socket.on("ice-candidate", async (data) => {
 
 // Handle renegotiation offer from the server
 socket.on("renegotiation-offer", async (data) => {
-  console.log("Renegotiation offer received:", data.offer);
-
-  if (peerConnection.signalingState !== "stable") {
-    console.warn(
-      "Skipping renegotiation as signaling state is:",
-      peerConnection.signalingState
-    );
-    return;
-  }
+  console.log("Renegotiation offer received from server:", data.offer);
 
   try {
     await peerConnection.setRemoteDescription(
       new RTCSessionDescription(data.offer)
     );
+    console.log("Remote description set for renegotiation offer.");
+
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
+
+    console.log("Renegotiation answer created:", answer.sdp);
     socket.emit("renegotiation-answer", { answer });
-    console.log("Renegotiation completed successfully.");
+    console.log("Renegotiation answer sent to server.");
   } catch (error) {
-    console.error("Error handling renegotiation:", error);
+    console.error("Error handling renegotiation offer:", error);
   }
 });
-// socket.on("user-disconnected", (data) => {
-//   const streamId = data.streamId;
-//   console.log(`User disconnected: Stream ID=${streamId}`);
-
-//   const remoteVideo = document.getElementById(`video-${streamId}`);
-//   if (remoteVideo) {
-//     remoteVideo.remove();
-//     console.log(`Removed video element for stream ID: ${streamId}`);
-//   } else {
-//     console.warn(`No video element found for stream ID: ${streamId}`);
-//   }
-// });
-socket.on("user-disconnected", (data) => {
-  const streamId = data.streamId;
-  console.log(`User disconnected: Stream ID=${streamId}`);
-
-  const remoteVideo = document.getElementById(`video-${streamId}`);
-  if (remoteVideo) {
-    remoteVideo.srcObject = null; // Clear the video element source
-    remoteVideo.remove(); // Remove the video element from the DOM
-    console.log(`Removed video element for stream ID: ${streamId}`);
-  } else {
-    console.warn(`No video element found for Stream ID: ${streamId}`);
-  }
-});
-
-function cleanUpResources() {
-  // Stop local media tracks
-  if (localStream) {
-    localStream.getTracks().forEach((track) => {
-      track.stop();
-      console.log(`Stopped local track: ${track.id}`);
-    });
-    localStream = null;
-  }
-
-  // Close PeerConnection
-  if (peerConnection) {
-    peerConnection.getSenders().forEach((sender) => {
-      if (sender.track) {
-        sender.track.stop();
-        console.log(`Stopped sender track: ${sender.track.id}`);
-      }
-    });
-    peerConnection.close();
-    console.log("PeerConnection closed.");
-    peerConnection = null;
-  }
-
-  // Remove all remote video elements
-  const remoteVideos = document.getElementById("remoteVideos");
-  if (remoteVideos) {
-    remoteVideos.innerHTML = ""; // Clear all remote video elements
-    console.log("Removed all remote video elements.");
-  }
-}
-
-// Trigger cleanup on page unload
-window.addEventListener("beforeunload", cleanUpResources);
-
-
-// Example: Trigger cleanup on a button click or before unloading the page
-window.addEventListener("beforeunload", cleanUpResources);
 
 // Initialize

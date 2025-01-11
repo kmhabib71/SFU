@@ -388,7 +388,7 @@ io.on("connection", (socket) => {
     peerConnection: null,
     isRenegotiating: false,
     localStreams: [], // Local streams (tracks created by this client)
-    forwardedStreams: [], // Forwarded streams (tracks received from others)
+    // forwardedStreams: [], // Forwarded streams (tracks received from others)
   };
   //console.log("Current clients:", Object.keys(clients));
 
